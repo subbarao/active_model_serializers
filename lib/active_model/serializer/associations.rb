@@ -15,6 +15,7 @@ module ActiveModel
       included do
         with_options instance_writer: false, instance_reader: true do |serializer|
           serializer.class_attribute :_reflections
+          serializer.class_attribute :_associations_via_include_param
           self._reflections ||= []
         end
 
@@ -67,6 +68,10 @@ module ActiveModel
           associate(HasOneReflection.new(name, options, block))
         end
 
+        def associations_via_include_param(val)
+          self._associations_via_include_param = val
+        end
+
         private
 
         # Add reflection and define {name} accessor.
@@ -83,7 +88,8 @@ module ActiveModel
       # @param [IncludeTree] include_tree (defaults to all associations when not provided)
       # @return [Enumerator<Association>]
       #
-      def associations(include_tree = DEFAULT_INCLUDE_TREE)
+      def associations(include_tree = DEFAULT_INCLUDE_TREE, current_include_tree = nil)
+        current_include_tree ||= include_tree
         return unless object
 
         Enumerator.new do |y|
@@ -91,7 +97,8 @@ module ActiveModel
             next if reflection.excluded?(self)
             key = reflection.options.fetch(:key, reflection.name)
             next unless include_tree.key?(key)
-            y.yield reflection.build_association(self, instance_options)
+
+            y.yield reflection.build_association(self, instance_options, current_include_tree)
           end
         end
       end

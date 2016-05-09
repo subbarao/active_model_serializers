@@ -231,17 +231,17 @@ module ActiveModelSerializers
         @primary = []
         @included = []
         @resource_identifiers = Set.new
-        serializers.each { |serializer| process_resource(serializer, true) }
+        serializers.each { |serializer| process_resource(serializer, true, @include_tree) }
         serializers.each { |serializer| process_relationships(serializer, @include_tree) }
 
         [@primary, @included]
       end
 
-      def process_resource(serializer, primary)
+      def process_resource(serializer, primary, include_tree = {})
         resource_identifier = ResourceIdentifier.new(serializer, instance_options).as_json
         return false unless @resource_identifiers.add?(resource_identifier)
 
-        resource_object = resource_object_for(serializer)
+        resource_object = resource_object_for(serializer, include_tree)
         if primary
           @primary << resource_object
         else
@@ -263,7 +263,7 @@ module ActiveModelSerializers
           return
         end
         return unless serializer && serializer.object
-        return unless process_resource(serializer, false)
+        return unless process_resource(serializer, false, include_tree)
 
         process_relationships(serializer, include_tree)
       end
@@ -289,7 +289,7 @@ module ActiveModelSerializers
       end
 
       # {http://jsonapi.org/format/#document-resource-objects Document Resource Objects}
-      def resource_object_for(serializer)
+      def resource_object_for(serializer, include_tree = {})
         resource_object = cache_check(serializer) do
           resource_object = ResourceIdentifier.new(serializer, instance_options).as_json
 
@@ -300,7 +300,7 @@ module ActiveModelSerializers
         end
 
         requested_associations = fieldset.fields_for(resource_object[:type]) || '*'
-        relationships = relationships_for(serializer, requested_associations)
+        relationships = relationships_for(serializer, requested_associations, include_tree)
         resource_object[:relationships] = relationships if relationships.any?
 
         links = links_for(serializer)
@@ -428,9 +428,9 @@ module ActiveModelSerializers
       #     id: 'required-id',
       #     meta: meta
       #   }.reject! {|_,v| v.nil? }
-      def relationships_for(serializer, requested_associations)
-        include_tree = ActiveModel::Serializer::IncludeTree.from_include_args(requested_associations)
-        serializer.associations(include_tree).each_with_object({}) do |association, hash|
+      def relationships_for(serializer, requested_associations, current_include_tree)
+        full_include_tree = ActiveModel::Serializer::IncludeTree.from_include_args(requested_associations)
+        serializer.associations(full_include_tree, current_include_tree).each_with_object({}) do |association, hash|
           hash[association.key] = Relationship.new(
             serializer,
             association.serializer,
