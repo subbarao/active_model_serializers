@@ -69,19 +69,17 @@ module ActiveModel
       #       Blog.find(object.blog_id)
       #     end
       #   end
-      def value(serializer)
+      def value(serializer, include_slice)
         @object = serializer.object
         @scope = serializer.scope
 
-        if block
-          block_value = instance_exec(serializer, &block)
-          if block_value != :nil
-            block_value
-          elsif @_include_data
-            serializer.read_attribute_for_serialization(name)
-          end
-        else
+        block_value = instance_exec(serializer, &block) if block
+        return unless include_data?(include_slice)
+
+        if [nil, :nil].include?(block_value)
           serializer.read_attribute_for_serialization(name)
+        else
+          block_value
         end
       end
 
@@ -106,11 +104,11 @@ module ActiveModel
       #
       # @api private
       #
-      def build_association(subject, parent_serializer_options)
-        association_value = value(subject)
+      def build_association(subject, parent_serializer_options, include_slice = {})
+        association_value = value(subject, include_slice)
         reflection_options = options.dup
         serializer_class = subject.class.serializer_for(association_value, reflection_options)
-        reflection_options[:include_data] = @_include_data
+        reflection_options[:include_data] = include_data?(include_slice)
 
         if serializer_class
           begin
@@ -133,6 +131,14 @@ module ActiveModel
       attr_accessor :object, :scope
 
       private
+
+      def include_data?(include_slice)
+        if @_include_data == :via_include_parameter
+          include_slice.key?(name)
+        else
+          @_include_data
+        end
+      end
 
       def serializer_options(subject, parent_serializer_options, reflection_options)
         serializer = reflection_options.fetch(:serializer, nil)
